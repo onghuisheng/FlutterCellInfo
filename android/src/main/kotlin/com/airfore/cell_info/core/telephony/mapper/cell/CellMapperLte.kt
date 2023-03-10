@@ -1,6 +1,5 @@
 package cz.mroczis.netmonster.core.telephony.mapper.cell
 
-import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.os.Build
 import android.telephony.CellIdentityLte
@@ -9,6 +8,7 @@ import android.telephony.SignalStrength
 import android.telephony.gsm.GsmCellLocation
 import cz.mroczis.netmonster.core.db.BandTableLte
 import cz.mroczis.netmonster.core.model.Network
+import cz.mroczis.netmonster.core.model.band.AggregatedBandLte
 import cz.mroczis.netmonster.core.model.band.BandLte
 import cz.mroczis.netmonster.core.model.cell.CellLte
 import cz.mroczis.netmonster.core.model.cell.ICell
@@ -17,14 +17,19 @@ import cz.mroczis.netmonster.core.model.connection.PrimaryConnection
 import cz.mroczis.netmonster.core.model.signal.SignalLte
 import cz.mroczis.netmonster.core.util.*
 import kotlin.math.abs
-import kotlin.math.absoluteValue
 
 /**
  * [CellIdentityLte] -> [CellLte]
  */
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR2)
-internal fun CellIdentityLte.mapCell(subId: Int, connection: IConnection, signal: SignalLte): CellLte? {
-    val network = mapNetwork()
+internal fun CellIdentityLte.mapCell(
+    subId: Int,
+    connection: IConnection,
+    signal: SignalLte,
+    timestamp: Long? = null,
+    plmn: Network? = null,
+): CellLte {
+    val network = plmn ?: mapNetwork()
     val ci = ci.inRangeOrNull(CellLte.CID_RANGE)
     val tac = tac.inRangeOrNull(CellLte.TAC_RANGE)
     val pci = pci.inRangeOrNull(CellLte.PCI_RANGE)
@@ -33,13 +38,34 @@ internal fun CellIdentityLte.mapCell(subId: Int, connection: IConnection, signal
         earfcn.inRangeOrNull(BandLte.DOWNLINK_EARFCN_RANGE)
     } else null
 
-    val bandwidth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        bandwidth.inRangeOrNull(CellLte.BANDWIDTH_RANGE)
+    val band = if (earfcn != null) {
+        BandTableLte.map(earfcn = earfcn, mcc = network?.mcc)
     } else null
 
-    val band = if (earfcn != null) {
-        BandTableLte.map(earfcn)
+    val suggestedBands = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        bands.filter { it in BandTableLte.BAND_NUMBER_RANGE }
+    } else {
+        emptyList()
+    }
+
+    val aggregatedBands = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && band?.number != null) {
+        val bands = bands
+        if (bands.size > 1 && bands.contains(band.number)) {
+            (bands.toList() - band.number)
+                .mapNotNull { BandTableLte.getByNumber(it) }
+                .map { AggregatedBandLte(it.number, it.name) }
+        } else emptyList()
+    } else emptyList()
+
+    val bandwidth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        bandwidth.inRangeOrNull(CellLte.BANDWIDTH_RANGE).takeIf {
+            // Sync issue, devices sometimes report invalid combos
+            // Example: EARFCN=473, Bands=[20], BW=10_000
+            // Real values: EARFCN=473, Bands=[1], BW=20_000
+            band?.number == null || suggestedBands.isEmpty() || suggestedBands.contains(band.number)
+        }
     } else null
+
 
     return CellLte(
         network = network,
@@ -50,7 +76,9 @@ internal fun CellIdentityLte.mapCell(subId: Int, connection: IConnection, signal
         connectionStatus = connection,
         signal = signal,
         band = band,
-        subscriptionId = subId
+        subscriptionId = subId,
+        timestamp = timestamp,
+        aggregatedBands = aggregatedBands
     )
 }
 
@@ -221,7 +249,7 @@ internal fun GsmCellLocation.mapLte(subId: Int, signalStrength: SignalStrength?,
             rsrq = rsrq,
             cqi = cqi,
             snr = snr,
-            timingAdvance = null
+            timingAdvance = null,
         )
     }
 
@@ -235,7 +263,9 @@ internal fun GsmCellLocation.mapLte(subId: Int, signalStrength: SignalStrength?,
             bandwidth = null,
             signal = signal,
             connectionStatus = PrimaryConnection(),
-            subscriptionId = subId
+            subscriptionId = subId,
+            timestamp = null,
+            aggregatedBands = emptyList(),
         )
     } else null
 }

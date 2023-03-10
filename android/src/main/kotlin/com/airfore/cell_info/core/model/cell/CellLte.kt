@@ -2,8 +2,10 @@ package cz.mroczis.netmonster.core.model.cell
 
 import android.os.Build
 import androidx.annotation.IntRange
+import cz.mroczis.netmonster.core.Milliseconds
 import cz.mroczis.netmonster.core.model.Network
 import cz.mroczis.netmonster.core.model.annotation.SinceSdk
+import cz.mroczis.netmonster.core.model.band.AggregatedBandLte
 import cz.mroczis.netmonster.core.model.band.BandLte
 import cz.mroczis.netmonster.core.model.connection.IConnection
 import cz.mroczis.netmonster.core.model.signal.SignalLte
@@ -34,6 +36,13 @@ data class CellLte(
     override val band: BandLte?,
 
     /**
+     * In case of carrier aggregation these bands are aggregated to this cell.
+     * If this list is empty then it does not necessarily mean that aggregation is not in place.
+     */
+    @SinceSdk(Build.VERSION_CODES.R)
+    val aggregatedBands: List<AggregatedBandLte>,
+
+    /**
      * Bandwidth in kHz or null if unavailable
      *
      * Unit: kHz
@@ -44,7 +53,8 @@ data class CellLte(
 
     override val signal: SignalLte,
     override val connectionStatus: IConnection,
-    override val subscriptionId: Int
+    override val subscriptionId: Int,
+    override val timestamp: Milliseconds?,
 ) : ICell {
 
     /**
@@ -68,6 +78,7 @@ data class CellLte(
         get() = if (network != null && eci != null) {
             "${network.toPlmn()}${eci.toString().padStart(10, '0')}"
         } else null
+
 
     override fun <T> let(processor: ICellProcessor<T>): T = processor.processLte(this)
 
