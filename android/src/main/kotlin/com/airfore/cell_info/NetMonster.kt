@@ -172,8 +172,10 @@ class NetMonster {
         }
 
 
-        Log.d(TAG, "requestData: " + Gson().toJson(cellsResponse))
-        result?.success(Gson().toJson(cellsResponse))
+        val cellsResponseJson = Gson().toJson(cellsResponse);
+        Log.d(TAG, "requestData: " + cellsResponseJson)
+        result?.success(cellsResponseJson)
+
         return cellsResponse
     }
 
