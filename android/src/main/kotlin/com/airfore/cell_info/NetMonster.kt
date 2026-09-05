@@ -185,7 +185,7 @@ class NetMonster {
         val simInfoLists = ArrayList<SIMInfo>()
         val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
         val activeSubscriptionInfoList = subscriptionManager.activeSubscriptionInfoList
-        for (subscriptionInfo in activeSubscriptionInfoList) {
+        for (subscriptionInfo in activeSubscriptionInfoList!!) {
             val carrierName = subscriptionInfo.carrierName
             val displayName = subscriptionInfo.displayName
             val mcc = subscriptionInfo.mcc
